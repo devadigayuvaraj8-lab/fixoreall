@@ -1,0 +1,42 @@
+{
+  "summary": "Verified the OTP-fallback bug fix and the new Swiggy-style dispatch flow end-to-end against the live backend (REAL Resend mode, MongoDB Atlas). 13/13 pytest backend tests PASS. OTP fallback: request-otp to a non-verified recipient returns {ok:true, sent:false, dev_mode:false, dev_otp:'XXXXXX'} (6-digit string) and the returned OTP successfully verifies. request-otp to devadigayuvaraj8@gmail.com returns sent:true with no dev_otp (Resend delivered). 30s rate-limit still enforced (429). Dispatch flow: booking creation kicks async dispatch -> status 'dispatching', offered_to set, offer_expires_at ~30s ahead, eta_minutes computed. /api/technician/offer returns the offer for the offered tech and {offer:null} for others. Accept sets status=accepted, technician_id, eta; accepting again -> 400. Reject adds tech to rejected_by and re-dispatches (does not re-offer same tech). With 2 online techs, after the offered tech accepts and then quits, status flips back to 'dispatching', technician_id cleared, the quitting tech is in rejected_by, quit_reason persisted, and the second tech becomes the new offered_to. Quit by a different tech -> 403. Delay updates delay_reason/delay_minutes/eta_minutes and broadcasts 'delay' over WS (/api/ws/booking/{id} verified). GPS PATCH /api/technician/location updates user lat/lng and propagates to active bookings (technician_lat/lng on the booking match the new location).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_dispatch_flow.py",
+    "/app/test_reports/pytest/dispatch_flow_results.xml"
+  ],
+  "action_items": [
+    "Frontend verify screen must now read dev_otp from the request-otp RESPONSE (not just query string) since the backend exposes it as a fallback when Resend can't deliver. Confirm /verify auto-fills the OTP from the API response and surfaces a subtle dev-fallback banner so the real user (not on devadigayuvaraj8@gmail.com) can still log in.",
+    "OPTIONAL: existing /app/backend/tests/test_fixo_backend.py is now stale — its assertions on `dev_mode is True` and `status == 'assigned'` after booking creation reflect the OLD behavior. Update or quarantine it; the new authoritative suite is test_dispatch_flow.py.",
+    "OPTIONAL: log a one-line WARN once per startup that Resend free tier only delivers to the account email; this aids operators."
+  ],
+  "critical_code_review_comments": [
+    "request-otp fallback exposes dev_otp in plaintext to the API caller whenever Resend send fails — acceptable for the user's MVP/testing situation but MUST be removed (or gated by a feature flag) before public production launch; anyone who knows the email can claim the account.",
+    "expire_offers_loop runs every 2s in lifespan; correctly cancelled on shutdown. ETA computation max(5, dist/25kmh*60) — when remote coords are used in tests ETA goes into thousands of minutes (e.g. 4503). Not a bug for production where coords are city-scale; consider clamping to a sane upper bound (e.g. 240 min) anyway.",
+    "rank_technicians excludes techs with any active booking; this means a tech with a quit-in-progress can immediately receive new offers — good. However the same tech can be re-offered the SAME booking if not in rejected_by; quit() correctly appends them to rejected_by, so re-dispatch lands on a different tech as verified.",
+    "respond_to_offer accept path sets technician_id and clears offered_to atomically — good. No race-condition guard if two techs are somehow offered simultaneously (shouldn't happen since offered_to is single-valued, but worth noting).",
+    "quit_job clears accepted_at to None and resets delay fields — consistent.",
+    "GPS update propagates technician_lat/lng to all active bookings in a loop — fine for low scale but a single $set with a multi-doc update or bulk_write would be more efficient at scale."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_dispatch_flow.py (new — 13 tests covering OTP fallback + full dispatch flow)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 on dispatch+otp-fallback suite)",
+    "frontend": "not tested this iteration (backend-only request)"
+  },
+  "seed_data_creation": "Each test creates ephemeral users (test_<role>_<uuid8>@fixotest.com) and bookings on Mongo Atlas. No global seed beyond the 8 auto-seeded services. Bookings/users from previous iterations remain; tests use random remote ocean coords to ensure their fresh tech wins ranking.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend env: DEV_MODE=False (RESEND_API_KEY set). request-otp now ALWAYS returns dev_otp whenever Resend send fails (any address != devadigayuvaraj8@gmail.com). Public URL: https://instant-book-14.preview.emergentagent.com. Run: EXPO_PUBLIC_BACKEND_URL=<url> pytest /app/backend/tests/test_dispatch_flow.py -v. Each test that needs an isolated tech should use _remote_coords() (random lat in [-60,-10], lng in [-170,-100]) to dominate AI ranking. Booking status after POST /api/bookings transitions: pending -> dispatching (async) -> accepted/etc. Use a brief poll (5-10x300ms) to wait for the dispatching status, since offer_booking_to_next runs as asyncio.create_task. The stale /app/backend/tests/test_fixo_backend.py asserts dev_mode=True and status='assigned' and will fail under current backend; do not re-run it without updating.",
+  "rca_of_issue": "n/a — bug fix verified working as intended. Resend returns 403 ('You can only send testing emails to your own email address') for any recipient other than devadigayuvaraj8@gmail.com; the backend catches that (status_code not in 200/202), logs '[OTP-FALLBACK] Resend delivery failed ... exposing OTP in API response', and adds dev_otp to the response payload. Verify-otp accepts it normally."
+}

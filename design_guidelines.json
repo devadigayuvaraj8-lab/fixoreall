@@ -1,0 +1,104 @@
+{
+  "theme": "Light",
+  "archetype": "Archetype 4: Swiss & High-Contrast (Adapted for Mobile Marketplace)",
+  "colors": {
+    "background": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "primary": "#0F172A",
+    "accent": "#EA580C",
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#64748B",
+      "muted": "#94A3B8"
+    },
+    "status": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "info": "#3B82F6"
+    },
+    "borders": "#E2E8F0"
+  },
+  "typography": {
+    "headings": {
+      "fontFamily": "Outfit, sans-serif",
+      "weight": "600",
+      "sizes": {
+        "h1": "text-3xl tracking-tight",
+        "h2": "text-2xl tracking-tight",
+        "h3": "text-xl",
+        "h4": "text-lg"
+      }
+    },
+    "body": {
+      "fontFamily": "Manrope, sans-serif",
+      "sizes": {
+        "base": "text-base leading-relaxed",
+        "sm": "text-sm",
+        "xs": "text-xs tracking-wide uppercase font-semibold"
+      }
+    }
+  },
+  "layout": {
+    "container": "max-w-md mx-auto bg-slate-50 min-h-screen relative shadow-2xl overflow-x-hidden",
+    "spacing": {
+      "screen_padding": "px-4",
+      "section_gap": "gap-8",
+      "item_gap": "gap-4"
+    },
+    "bottom_nav": "fixed bottom-0 w-full max-w-md bg-white/90 backdrop-blur-xl border-t border-slate-200/50 pb-6 pt-3 px-6 flex justify-between items-center z-50",
+    "cards": "bg-white rounded-2xl p-5 border border-slate-100 shadow-[0_4px_20px_rgba(0,0,0,0.04)]",
+    "micro_interactions": "active:scale-[0.98] transition-transform duration-200 ease-out"
+  },
+  "components": {
+    "buttons": {
+      "primary": "w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-4 font-semibold text-base flex items-center justify-center gap-2 active:scale-95 transition-all",
+      "secondary": "bg-slate-100 hover:bg-slate-200 text-slate-900 rounded-xl py-3 px-4 font-medium active:scale-95 transition-all",
+      "icon_button": "p-3 rounded-full bg-white shadow-sm border border-slate-100 text-slate-900"
+    },
+    "category_grid": "grid grid-cols-4 gap-4",
+    "category_item": "flex flex-col items-center gap-2",
+    "category_icon_wrapper": "w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 active:scale-95 transition-transform",
+    "skeleton": "animate-pulse bg-slate-200 rounded-xl",
+    "badges": "px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-800",
+    "glass_header": "sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-100 px-4 py-3 flex items-center justify-between"
+  },
+  "media": {
+    "images": [
+      {
+        "category": "hero_banner_repair",
+        "url": "https://images.unsplash.com/photo-1621905251918-48416bd8575a",
+        "description": "Technician with tools (use for AC/Repair banner)"
+      },
+      {
+        "category": "hero_banner_cleaning",
+        "url": "https://images.pexels.com/photos/6196694/pexels-photo-6196694.jpeg",
+        "description": "Cleaning service banner"
+      },
+      {
+        "category": "technician_profile",
+        "url": "https://images.unsplash.com/photo-1671450960874-0903baf942c5",
+        "description": "Smiling Indian technician portrait"
+      },
+      {
+        "category": "category_tools_abstract",
+        "url": "https://images.unsplash.com/photo-1562259929-b4e1fd3aef09",
+        "description": "Power drill close up"
+      }
+    ],
+    "icons_library": "lucide-react"
+  },
+  "testing": {
+    "attributes": "All interactive elements MUST use data-testid attributes (e.g., data-testid='login-button', data-testid='role-selector-customer')."
+  },
+  "instructions_to_main_agent": [
+    "Design the UI using React.js and Tailwind CSS mapped perfectly to mimic a mobile app (PWA layout). Use the layout.container classes (`max-w-md mx-auto`) to confine it to mobile proportions on desktop.",
+    "Ensure all components are written in `.js`/`.jsx`, not TypeScript.",
+    "Implement bottom sheet navigation (like Swiggy/Urban Company) using absolute positioning at bottom, glassmorphism (`backdrop-blur-xl`), and fixed width `max-w-md`.",
+    "Use Shadcn UI components for complex interactions like Drawers/Dialogs for the booking flow.",
+    "Implement the Two-Tap Rule: Browsing to booking should be extremely frictionless.",
+    "Ensure Hindi/Indian context by using ₹ (INR) currency formatting throughout the app.",
+    "For the Map UI/Live Tracking, if a real map library isn't available, build a beautiful mock UI using an image background with a pulsing dot and an ETA card hovering over it.",
+    "Technician dashboard needs clear data visuals (Shadcn Recharts) and a prominent 'Go Online/Offline' toggle button.",
+    "Apply 'data-testid' to EVERY button, input, and critical navigational element."
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "summary": "Verified the new Swiggy-style MULTI-CAST DISPATCH upgrade end-to-end against the live backend (REAL Resend mode, MongoDB Atlas). New focused suite test_multicast_dispatch.py: 10/10 PASS covering broadcast-to-nearby (3 nearby + 2 far at ~12km -> only nearby in offered_to_many, cap 5), per-tech offer visibility, FCFS race (first accept wins, second gets 400/409, other techs' offer endpoint returns null), single-reject keeps others, all-reject triggers re-dispatch (status flips to 'pending' when no more techs), 8km radius exclusion (10.5km tech excluded), GPS PATCH /technician/location updates booking.technician_lat/lng AND fires 'location' WS message on /api/ws/booking/{id}, OTP fallback dev_otp + 30s rate limit still active, and accepted -> on_the_way -> started -> completed credits 85% of base_price to technician wallet (confirmed via /technician/earnings). Pre-existing test_dispatch_flow.py: 12/13 PASS — 1 stale test (test_offer_reject_records_and_redispatches) fails on the deprecated single-string `offered_to` field not being cleared when the only-tech reject path moves status to 'pending' (offered_to_many IS correctly cleared, only the back-compat string field is stale). This is a minor data-hygiene issue, not a functional regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/technician/offer/{id}/respond (reject path) + offer_booking_to_next pending branch",
+        "issue": "When a reject leads to re-dispatch with NO remaining candidates and status moves to 'pending' (server.py line 571), `offered_to_many` is cleared to [] and `offer_expires_at` to None, but the deprecated single-string `offered_to` field is NOT cleared and retains the id of the last-offered (now-rejected) tech. Functionally harmless (frontend should read offered_to_many), but leaks a stale tech id and breaks consumers still reading offered_to. Fix: add `\"offered_to\": None` to both pending $set branches (lines 557 and 571)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multicast_dispatch.py (new - 10 tests for multicast upgrade)",
+    "/app/test_reports/pytest/multicast_results.xml",
+    "/app/backend/tests/test_dispatch_flow.py (existing - 12/13 pass, 1 stale on deprecated offered_to field)"
+  ],
+  "action_items": [
+    "Optional minor cleanup: in /app/backend/server.py, also set `offered_to: None` in the two 'pending' $set blocks inside offer_booking_to_next (lines 557 and 571) so the deprecated back-compat field doesn't leak a stale rejected tech id. Then update /app/backend/tests/test_dispatch_flow.py::TestDispatchOffer::test_offer_reject_records_and_redispatches to assert on offered_to_many == [] instead of offered_to (since offered_to is deprecated per agent-to-agent note).",
+    "Frontend (when tested next): customer Live Tracking screen must read booking.technician_lat/technician_lng on each 'location' WS message and animate the bike marker (🛵) relative to customer pin using lat/lng deltas. Confirm the bike marker also appears during 'dispatching' state (leading tech blip) and switches to the accepting tech's coords after the 'accepted' WS event.",
+    "Frontend: technician offer modal must subscribe to /api/ws/technician/{tech_id} and close on 'job_taken' message (broadcast on a winning accept).",
+    "Long-term: remove the deprecated `offered_to` (single string) field from booking docs / API response once frontend no longer references it. Search frontend for `offered_to` to ensure only offered_to_many is consumed."
+  ],
+  "critical_code_review_comments": [
+    "Dispatch broadcast logic in offer_booking_to_next is correct: rank_technicians excludes rejected_by + busy techs; filters by SEARCH_RADIUS_KM=8; caps at MAX_TECHS_PER_BROADCAST=5; sets offered_to_many, offered_to (back-compat), offer_expires_at = now+30s, eta from nearest, dispatch_attempts incremented; broadcasts per-tech via /technician/{tid} room and customer via /booking/{id} room.",
+    "Atomic accept (line 907-922): conditional Mongo update on {status:'dispatching', offered_to_many: user['id']} — perfect race protection. modified_count==0 -> 409. After accept, broadcasts 'job_taken' to all OTHER offered techs so their modals close (line 927-929). Correct.",
+    "expire_offers_loop (line 603) runs every 2s; treats expired offers as a soft-reject for every currently-offered tech (adds them all to rejected_by, clears offered_to_many, then calls offer_booking_to_next). Tested indirectly by all-reject test.",
+    "GPS PATCH /technician/location iterates bookings with status in (assigned/accepted/on_the_way/started) and broadcasts {type:'location', lat, lng} on /booking/{id} room — verified by WS test. Minor scale concern only.",
+    "MAX_DISPATCH_ATTEMPTS=4 — after 4 broadcast rounds the booking is force-set to pending. Edge case: a popular booking with many techs rejecting quickly could chew through 4 attempts in <1 minute and need manual re-trigger; consider exposing a customer-side 'retry search' button.",
+    "Earnings: status->completed credits exactly base_price * 0.85 to the technician wallet via credit_wallet (line 761). Verified end-to-end. Note that this credits on `base_price`, not `total` (which can be lower after wallet/referral discounts) — design choice that protects technician earnings from customer-side discounts. Good.",
+    "DEV_MODE is computed once at import from RESEND_API_KEY presence. Backend currently in REAL mode; OTP fallback to dev_otp when Resend returns non-200 is the documented bug fix from iteration 2 and still works."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_multicast_dispatch.py (created)"
+  ],
+  "success_rate": {
+    "backend": "100% on new multicast suite (10/10). 92.3% on combined dispatch suite (22/23) — the single fail is on the deprecated offered_to single-string field not the new offered_to_many.",
+    "frontend": "not tested (backend-only request)"
+  },
+  "seed_data_creation": "Each test creates fresh ephemeral users (test_<role>_<uuid8>@fixotest.com) on Mongo Atlas. Customer locations are random remote ocean coords; nearby techs placed at ~1-3km offsets, far techs at >=10km. No global seed beyond the 8 auto-seeded services.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "MULTI-CAST DISPATCH is FULLY VERIFIED on the live backend at https://instant-book-14.preview.emergentagent.com. Run: pytest /app/backend/tests/test_multicast_dispatch.py -v (≈2.5min). For frontend testing: customer should see 🛵 bike marker on mock map at booking.technician_lat/technician_lng with position projected from lat/lng deltas relative to customer pin; ensure WS /api/ws/booking/{id} 'location' messages animate it. Technician offer modal must subscribe to /api/ws/technician/{tech_id} (room key 'technician:{id}') and handle {type:'new_offer'} (open modal with 30s timer) and {type:'job_taken'} (close modal). For race testing: use 3+ online techs near the same coord — only one will succeed; others get 409. The deprecated `offered_to` single-string field still appears in responses for back-compat but should be ignored by the UI; frontend must use offered_to_many array.",
+  "rca_of_issue": "The 1 failing existing test (test_dispatch_flow.py::test_offer_reject_records_and_redispatches) is NOT a regression of the multicast feature. It asserts `gb.get('offered_to') != tuser['id']` after the only-tech rejection path. Reproduction: with 1 online tech, POST booking -> tech is in offered_to_many=[t] and offered_to=t (back-compat). Tech POSTs respond {accept:false} -> rejected_by=[t], offered_to_many=[], then offer_booking_to_next runs, finds no candidates left, $sets {status:'pending', offered_to_many:[], offer_expires_at:None} but NOT offered_to. So offered_to retains the stale 't'. Mitigation: add `'offered_to': None` to the two pending-branch $set dicts in offer_booking_to_next (server.py lines 557 and 571). Recommend doing this AND updating the stale test assertion to use offered_to_many."
+}
