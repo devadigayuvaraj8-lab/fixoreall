@@ -27,9 +27,12 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # ---------------- Config ----------------
-MONGO_URL = os.environ['MONGO_URL']
-DB_NAME = os.environ['DB_NAME']
-JWT_SECRET = os.environ.get('JWT_SECRET', 'fixo-dev-secret-change-in-prod')
+MONGO_URL = os.getenv("MONGO_URL")
+DB_NAME = os.getenv("DB_NAME", "fixo")
+JWT_SECRET = os.getenv("JWT_SECRET", "fixo-dev-secret-change-in-prod")
+
+if not MONGO_URL:
+    raise RuntimeError("MONGO_URL environment variable is missing")
 JWT_ALGO = "HS256"
 JWT_EXP_DAYS = 30
 OTP_EXPIRY_MINUTES = 10
