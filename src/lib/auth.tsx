@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { storage } from "@/src/utils/storage";
 
 export type User = {
@@ -22,42 +22,51 @@ type AuthCtx = {
   loading: boolean;
   signIn: (token: string, user: User) => Promise<void>;
   signOut: () => Promise<void>;
-  refresh: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx>({
   user: null,
-  loading: false,
+  loading: true,
   signIn: async () => {},
   signOut: async () => {},
-  refresh: async () => {},
 });
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: any) => {
   const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const savedUser = await storage.getItem("fixo_user", null);
+
+        if (savedUser) {
+        setUser(savedUser as User);
+       }
+      } catch (e) {
+        console.log(e);
+      }
+
+      setLoading(false);
+    };
+
+    load();
+  }, []);
 
   const signIn = async (token: string, u: User) => {
-    await storage.secureSet("fixo_token", token);
-    setUser(u);
-  };
+  await storage.secureSet("fixo_token", token);
+  await storage.setItem("fixo_user", u);
+  setUser(u);
+};
 
   const signOut = async () => {
-    await storage.secureRemove("fixo_token");
-    setUser(null);
-  };
-
-  const refresh = async () => {};
+  await storage.secureRemove("fixo_token");
+  await storage.removeItem("fixo_user");
+  setUser(null);
+};
 
   return (
-    <Ctx.Provider
-      value={{
-        user,
-        loading: false,
-        signIn,
-        signOut,
-        refresh,
-      }}
-    >
+    <Ctx.Provider value={{ user, loading, signIn, signOut }}>
       {children}
     </Ctx.Provider>
   );

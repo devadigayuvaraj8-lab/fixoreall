@@ -1,133 +1,265 @@
-import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from "react-native";
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { colors, font, radius, spacing, shadow } from "@/src/lib/theme";
+
+import { colors, radius, spacing } from "@/src/lib/theme";
 import { api } from "@/src/lib/api";
+import { storage } from "@/src/utils/storage";
 
 export default function Login() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"customer" | "technician">("customer");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const submit = async () => {
-    setError(null);
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) {
-      setError("Enter a valid email");
+  const [phone, setPhone] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [code, setCode] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // OTP timer
+  const [timer, setTimer] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+
+  // 🔥 START TIMER
+  useEffect(() => {
+    let interval: any;
+
+    if (otpSent && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    }
+
+    if (timer === 0) {
+      setCanResend(true);
+      clearInterval(interval);
+    }
+
+    return () => clearInterval(interval);
+  }, [otpSent, timer]);
+
+  // 📲 SEND OTP
+  const sendOtp = async () => {
+    setError("");
+
+    if (phone.length !== 10) {
+      setError("Enter valid mobile number");
       return;
     }
-    setLoading(true);
+
     try {
-      const r = await api<{ ok: boolean; dev_mode: boolean; dev_otp?: string }>("/auth/request-otp", {
+      setLoading(true);
+
+      await api("/auth/send-otp", {
         method: "POST",
-        body: { email: email.trim().toLowerCase(), role },
         auth: false,
+        body: { phone: `+91${phone.trim()}` },
       });
-      router.push({
-        pathname: "/auth/verify",
-        params: { email: email.trim().toLowerCase(), role, dev_otp: r.dev_otp || "" },
-      });
+
+      setOtpSent(true);
+
+      // reset timer
+      setTimer(60);
+      setCanResend(false);
     } catch (e: any) {
-      setError(e.message || "Something went wrong");
+      console.log("Send OTP Error:", e.message);
+      setError(e.message || "Failed to send OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔐 VERIFY OTP
+  const verifyOtp = async () => {
+    setError("");
+
+    if (!code) {
+      setError("Enter OTP code");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const response = await api("/auth/verify-otp", {
+        method: "POST",
+        auth: false,
+        body: { phone: `+91${phone.trim()}`, code: code.trim() },
+      });
+
+      // Save JWT token
+      if (response.access_token) {
+        await storage.secureSet("fixo_token", response.access_token);
+        router.replace("/");
+      } else {
+        setError("Login failed: No token received");
+      }
+    } catch (e: any) {
+      console.log("Verify OTP Error:", e.message);
+      setError(e.message || "Invalid OTP");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <View style={styles.brandRow}>
-            <View style={styles.logoBox}><Text style={styles.logoText}>FIXO</Text></View>
-            <Text style={styles.tag}>Home services, on demand.</Text>
-          </View>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Welcome</Text>
 
-          <View style={styles.card}>
-            <Text style={font.h2}>Welcome</Text>
-            <Text style={[font.small, { marginTop: 6 }]}>Sign in with email — we&apos;ll send you a 6-digit code.</Text>
+        {/* 📱 PHONE INPUT */}
+        {!otpSent && (
+          <>
+            <Text style={styles.label}>Mobile Number</Text>
 
-            <View style={styles.roleRow}>
-              <TouchableOpacity
-                testID="role-customer"
-                style={[styles.roleBtn, role === "customer" && styles.roleBtnActive]}
-                onPress={() => setRole("customer")}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="person-outline" size={18} color={role === "customer" ? "#fff" : colors.text} />
-                <Text style={[styles.roleText, role === "customer" && { color: "#fff" }]}>I&apos;m a Customer</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                testID="role-technician"
-                style={[styles.roleBtn, role === "technician" && styles.roleBtnActive]}
-                onPress={() => setRole("technician")}
-                activeOpacity={0.85}
-              >
-                <Ionicons name="construct-outline" size={18} color={role === "technician" ? "#fff" : colors.text} />
-                <Text style={[styles.roleText, role === "technician" && { color: "#fff" }]}>I&apos;m a Technician</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Email</Text>
             <View style={styles.inputBox}>
-              <Ionicons name="mail-outline" size={20} color={colors.textSecondary} />
+              <Text style={{ marginRight: 5 }}>+91</Text>
+
               <TextInput
-                testID="email-input"
-                placeholder="you@example.com"
-                placeholderTextColor={colors.textMuted}
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
+                placeholder="9876543210"
+                keyboardType="number-pad"
+                value={phone}
+                onChangeText={setPhone}
                 style={styles.input}
+                maxLength={10}
+                editable={!loading}
               />
             </View>
 
-            {error ? <Text style={styles.error} testID="login-error">{error}</Text> : null}
+            <TouchableOpacity style={styles.button} onPress={sendOtp} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.btnText}>Send OTP</Text>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
 
-            <TouchableOpacity
-              testID="login-submit-button"
-              style={[styles.primaryBtn, loading && { opacity: 0.7 }]}
-              onPress={submit}
-              disabled={loading}
-              activeOpacity={0.9}
-            >
-              {loading ? <ActivityIndicator color="#fff" /> : (
-                <>
-                  <Text style={styles.primaryText}>Continue</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fff" />
-                </>
+        {/* 🔐 OTP INPUT */}
+        {otpSent && (
+          <>
+            <Text style={styles.label}>Enter OTP</Text>
+
+            <TextInput
+              placeholder="6-digit OTP"
+              keyboardType="number-pad"
+              value={code}
+              onChangeText={setCode}
+              style={styles.input}
+              maxLength={6}
+              editable={!loading}
+            />
+
+            <TouchableOpacity style={styles.button} onPress={verifyOtp} disabled={loading}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.btnText}>Verify OTP</Text>
               )}
             </TouchableOpacity>
 
-            <Text style={styles.footHelp}>By continuing you agree to our Terms & Privacy.</Text>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            {/* 🔁 RESEND */}
+            {canResend ? (
+              <TouchableOpacity onPress={sendOtp} disabled={loading}>
+                <Text style={styles.resend}>Resend OTP</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.timer}>
+                Resend OTP in {timer}s
+              </Text>
+            )}
+          </>
+        )}
+
+        {/* ❌ ERROR */}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  scroll: { flexGrow: 1, padding: spacing.lg, justifyContent: "center" },
-  brandRow: { alignItems: "center", marginBottom: spacing.xl },
-  logoBox: { paddingHorizontal: 18, paddingVertical: 8, backgroundColor: colors.accent, borderRadius: 10, marginBottom: 8 },
-  logoText: { color: "#fff", fontWeight: "800", fontSize: 28, letterSpacing: 3 },
-  tag: { ...font.small, color: colors.textSecondary },
-  card: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, ...shadow.card },
-  roleRow: { flexDirection: "row", gap: 10, marginTop: spacing.lg },
-  roleBtn: { flex: 1, paddingVertical: 12, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 },
-  roleBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  roleText: { fontSize: 13, fontWeight: "600", color: colors.text },
-  label: { ...font.tiny, marginTop: spacing.lg, marginBottom: 8, textTransform: "uppercase" },
-  inputBox: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: 12, gap: 8, backgroundColor: "#fff" },
-  input: { flex: 1, paddingVertical: 14, fontSize: 16, color: colors.text },
-  primaryBtn: { marginTop: spacing.lg, backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 16, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 8 },
-  primaryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
-  footHelp: { ...font.small, textAlign: "center", marginTop: spacing.md, color: colors.textMuted, fontSize: 11 },
-  error: { color: colors.danger, marginTop: 10, fontSize: 13 },
+  safe: {
+    flex: 1,
+    backgroundColor: colors.bg,
+  },
+
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    marginBottom: 30,
+  },
+
+  label: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+
+  inputBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    height: 52,
+    backgroundColor: "#fff",
+    marginBottom: 15,
+  },
+
+  input: {
+    flex: 1,
+    fontSize: 16,
+  },
+
+  button: {
+    backgroundColor: colors.primary,
+    padding: 15,
+    borderRadius: radius.md,
+    alignItems: "center",
+    marginTop: 10,
+  },
+
+  btnText: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+
+  resend: {
+    marginTop: 12,
+    color: colors.primary,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+
+  timer: {
+    marginTop: 12,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
+
+  error: {
+    color: "red",
+    marginTop: 10,
+    textAlign: "center",
+  },
 });
